@@ -357,6 +357,9 @@ class WP_Site_Analyzer {
         $cache_result = $this->cache_handler->set( 'scan_results', $final_results, 3600 ); // Cache for 1 hour
         error_log( 'WP Site Analyzer: Cache set result - ' . ( $cache_result ? 'success' : 'failed' ) );
         
+        // Also store in option as backup
+        update_option( 'wp_site_analyzer_scan_results_backup', $final_results, false );
+        
         // Update last scan time
         update_option( 'wp_site_analyzer_last_scan', current_time( 'mysql' ) );
 

@@ -174,6 +174,11 @@ class WP_Site_Analyzer_Admin {
         $cache_handler = new WP_Site_Analyzer_Cache_Handler();
         $cached_results = $cache_handler->get( 'scan_results' );
         
+        // If cache fails, try backup option
+        if ( ! $cached_results ) {
+            $cached_results = get_option( 'wp_site_analyzer_scan_results_backup' );
+        }
+        
         ?>
         <div class="wrap">
             <h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
@@ -590,6 +595,12 @@ class WP_Site_Analyzer_Admin {
     public function render_ai_report_page() {
         $cache_handler = new WP_Site_Analyzer_Cache_Handler();
         $results = $cache_handler->get( 'scan_results' );
+        
+        // If cache fails, try backup option
+        if ( ! $results ) {
+            $results = get_option( 'wp_site_analyzer_scan_results_backup' );
+            error_log( 'WP Site Analyzer: AI Report - Using backup option, found: ' . ( $results ? 'yes' : 'no' ) );
+        }
         
         // Debug logging
         error_log( 'WP Site Analyzer: AI Report - Cache results: ' . ( $results ? 'Found' : 'Not found' ) );
@@ -1061,7 +1072,8 @@ class WP_Site_Analyzer_Admin {
         $cache_handler = new WP_Site_Analyzer_Cache_Handler();
         $cache_handler->delete( 'scan_results' );
         
-        // Clear progress
+        // Clear backup and progress
+        delete_option( 'wp_site_analyzer_scan_results_backup' );
         delete_option( 'wp_site_analyzer_scan_progress' );
         delete_option( 'wp_site_analyzer_last_scan' );
         
