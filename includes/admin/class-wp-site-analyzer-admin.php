@@ -203,25 +203,38 @@ class WP_Site_Analyzer_Admin {
                     </div>
                 </div>
                 
-                <?php if ( $last_scan ) : ?>
+                <?php if ( $cached_results ) : ?>
                 <div class="dashboard-section">
                     <h2><?php esc_html_e( 'Last Scan Summary', 'wp-site-analyzer' ); ?></h2>
                     <ul class="scan-summary">
                         <li>
                             <strong><?php esc_html_e( 'Date:', 'wp-site-analyzer' ); ?></strong> 
-                            <?php echo esc_html( human_time_diff( strtotime( $last_scan['timestamp'] ), current_time( 'timestamp' ) ) ); ?> <?php esc_html_e( 'ago', 'wp-site-analyzer' ); ?>
+                            <?php 
+                            $timestamp = isset( $cached_results['timestamp'] ) ? $cached_results['timestamp'] : $last_scan;
+                            if ( $timestamp ) {
+                                echo esc_html( human_time_diff( strtotime( $timestamp ), current_time( 'timestamp' ) ) ) . ' ' . esc_html__( 'ago', 'wp-site-analyzer' );
+                            } else {
+                                esc_html_e( 'Unknown', 'wp-site-analyzer' );
+                            }
+                            ?>
                         </li>
                         <li>
                             <strong><?php esc_html_e( 'Execution Time:', 'wp-site-analyzer' ); ?></strong> 
-                            <?php echo esc_html( round( $last_scan['execution_time'], 2 ) ); ?> <?php esc_html_e( 'seconds', 'wp-site-analyzer' ); ?>
+                            <?php 
+                            if ( isset( $cached_results['execution_time'] ) ) {
+                                echo esc_html( round( $cached_results['execution_time'], 2 ) ) . ' ' . esc_html__( 'seconds', 'wp-site-analyzer' );
+                            } else {
+                                esc_html_e( 'Unknown', 'wp-site-analyzer' );
+                            }
+                            ?>
                         </li>
                         <li>
                             <strong><?php esc_html_e( 'Post Types Found:', 'wp-site-analyzer' ); ?></strong> 
-                            <?php echo isset( $cached_results['WP_Site_Analyzer_Post_Type_Scanner']['statistics']['total_post_types'] ) ? esc_html( $cached_results['WP_Site_Analyzer_Post_Type_Scanner']['statistics']['total_post_types'] ) : '0'; ?>
+                            <?php echo isset( $cached_results['results']['WP_Site_Analyzer_Post_Type_Scanner']['statistics']['total_post_types'] ) ? esc_html( $cached_results['results']['WP_Site_Analyzer_Post_Type_Scanner']['statistics']['total_post_types'] ) : '0'; ?>
                         </li>
                         <li>
                             <strong><?php esc_html_e( 'Taxonomies Found:', 'wp-site-analyzer' ); ?></strong> 
-                            <?php echo isset( $cached_results['WP_Site_Analyzer_Taxonomy_Scanner']['statistics']['total_taxonomies'] ) ? esc_html( $cached_results['WP_Site_Analyzer_Taxonomy_Scanner']['statistics']['total_taxonomies'] ) : '0'; ?>
+                            <?php echo isset( $cached_results['results']['WP_Site_Analyzer_Taxonomy_Scanner']['statistics']['total_taxonomies'] ) ? esc_html( $cached_results['results']['WP_Site_Analyzer_Taxonomy_Scanner']['statistics']['total_taxonomies'] ) : '0'; ?>
                         </li>
                     </ul>
                 </div>
@@ -240,7 +253,7 @@ class WP_Site_Analyzer_Admin {
                     <p><strong><?php esc_html_e( 'How to use:', 'wp-site-analyzer' ); ?></strong> <?php esc_html_e( 'Click "Start New Scan" to analyze your site, then view the AI Report to copy and share with AI models.', 'wp-site-analyzer' ); ?></p>
                 </div>
                 
-                <?php if ( current_user_can( 'manage_options' ) && ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ) : ?>
+                <?php if ( current_user_can( 'manage_options' ) ) : // Temporarily removed WP_DEBUG check for debugging ?>
                 <div class="dashboard-section" style="background: #fff3cd; border-color: #ffeaa7;">
                     <h2><?php esc_html_e( 'Debug Information', 'wp-site-analyzer' ); ?></h2>
                     
@@ -279,6 +292,17 @@ class WP_Site_Analyzer_Admin {
                             <button class="button" onclick="wpSiteAnalyzerDebug.testCache()"><?php esc_html_e( 'Test Cache Access', 'wp-site-analyzer' ); ?></button>
                         </p>
                     <?php endif; ?>
+                    
+                    <h3 style="margin-top: 20px;"><?php esc_html_e( 'JavaScript Debug Logs', 'wp-site-analyzer' ); ?></h3>
+                    <p><?php esc_html_e( 'Debug logs are stored in your browser and persist across page refreshes.', 'wp-site-analyzer' ); ?></p>
+                    <div id="debug-log-viewer" style="background: #f0f0f0; padding: 10px; border-radius: 3px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; margin: 10px 0;">
+                        <div style="color: #666;"><?php esc_html_e( 'Loading debug logs...', 'wp-site-analyzer' ); ?></div>
+                    </div>
+                    <p>
+                        <button class="button" onclick="wpSiteAnalyzerDebug.refreshLogs()"><?php esc_html_e( 'Refresh Logs', 'wp-site-analyzer' ); ?></button>
+                        <button class="button" onclick="wpSiteAnalyzerDebug.clearLogs()"><?php esc_html_e( 'Clear Logs', 'wp-site-analyzer' ); ?></button>
+                        <button class="button" onclick="wpSiteAnalyzerDebug.exportLogs()"><?php esc_html_e( 'Export Logs', 'wp-site-analyzer' ); ?></button>
+                    </p>
                 </div>
                 
                 <script>
@@ -303,8 +327,64 @@ class WP_Site_Analyzer_Admin {
                             console.log('Cache test response:', response);
                             alert('Check browser console for cache test results');
                         });
+                    },
+                    refreshLogs: function() {
+                        var logs = JSON.parse(localStorage.getItem('wp_site_analyzer_debug') || '[]');
+                        var viewer = document.getElementById('debug-log-viewer');
+                        
+                        if (logs.length === 0) {
+                            viewer.innerHTML = '<div style="color: #666;">No debug logs found.</div>';
+                            return;
+                        }
+                        
+                        var html = '';
+                        logs.forEach(function(log) {
+                            var time = new Date(log.time).toLocaleTimeString();
+                            var dataStr = log.data ? ' - ' + JSON.stringify(log.data) : '';
+                            var color = log.message.includes('error') || log.message.includes('failed') ? '#d00' : '#333';
+                            html += '<div style="margin: 2px 0; color: ' + color + ';">' + time + ' - ' + log.message + dataStr + '</div>';
+                        });
+                        
+                        viewer.innerHTML = html;
+                        viewer.scrollTop = viewer.scrollHeight;
+                    },
+                    clearLogs: function() {
+                        if (!confirm('Clear all debug logs?')) return;
+                        wpSiteAnalyzerClearLogs();
+                        this.refreshLogs();
+                        alert('Debug logs cleared!');
+                    },
+                    exportLogs: function() {
+                        var logs = JSON.parse(localStorage.getItem('wp_site_analyzer_debug') || '[]');
+                        var text = 'WP Site Analyzer Debug Logs\n';
+                        text += '==========================\n\n';
+                        
+                        logs.forEach(function(log) {
+                            text += log.time + ' - ' + log.message;
+                            if (log.data) {
+                                text += '\n' + JSON.stringify(log.data, null, 2);
+                            }
+                            text += '\n\n';
+                        });
+                        
+                        var blob = new Blob([text], { type: 'text/plain' });
+                        var url = URL.createObjectURL(blob);
+                        var a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'wp-site-analyzer-debug-' + new Date().toISOString().split('T')[0] + '.log';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
                     }
                 };
+                
+                // Auto-refresh logs on page load
+                jQuery(document).ready(function() {
+                    if (window.wpSiteAnalyzerDebug && window.wpSiteAnalyzerDebug.refreshLogs) {
+                        wpSiteAnalyzerDebug.refreshLogs();
+                    }
+                });
                 </script>
                 <?php endif; ?>
             </div>

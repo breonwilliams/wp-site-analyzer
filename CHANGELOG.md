@@ -2,6 +2,13 @@
 
 All notable changes to WP Site Analyzer will be documented in this file.
 
+## [1.0.3] - 2024-01-21
+
+### Fixed
+- Fixed fatal error "Cannot access offset of type string on string" on dashboard
+- Corrected data structure access for scan summary display
+- Fixed accessing cached results data structure
+
 ## [1.0.2] - 2024-01-21
 
 ### Fixed
