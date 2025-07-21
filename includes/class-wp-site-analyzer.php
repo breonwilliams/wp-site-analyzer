@@ -291,6 +291,9 @@ class WP_Site_Analyzer {
     public function perform_scan( $options = array() ) {
         $results = array();
         $start_time = microtime( true );
+        
+        // Log scan start
+        error_log( 'WP Site Analyzer: Starting scan with ' . count( $this->scanners ) . ' scanners' );
 
         // Update progress
         update_option( 'wp_site_analyzer_scan_progress', array(
@@ -315,7 +318,15 @@ class WP_Site_Analyzer {
             ) );
 
             // Run scanner
-            $results[ $scanner_name ] = $scanner->scan();
+            try {
+                error_log( 'WP Site Analyzer: Running scanner - ' . $scanner_name );
+                $scanner_results = $scanner->scan();
+                $results[ $scanner_name ] = $scanner_results;
+                error_log( 'WP Site Analyzer: Scanner ' . $scanner_name . ' completed with ' . ( is_array( $scanner_results ) ? count( $scanner_results ) : 'non-array' ) . ' results' );
+            } catch ( Exception $e ) {
+                error_log( 'WP Site Analyzer: Scanner ' . $scanner_name . ' failed with error: ' . $e->getMessage() );
+                $results[ $scanner_name ] = array( 'error' => $e->getMessage() );
+            }
             $current++;
         }
 
@@ -331,14 +342,25 @@ class WP_Site_Analyzer {
             'execution_time' => $execution_time,
         ) );
 
-        // Cache results
-        $this->cache_handler->set( 'scan_results', $results, 3600 ); // Cache for 1 hour
-
-        return array(
+        // Prepare final results
+        $final_results = array(
             'results' => $results,
             'execution_time' => $execution_time,
             'timestamp' => current_time( 'mysql' ),
         );
+        
+        // Log results summary
+        error_log( 'WP Site Analyzer: Scan completed in ' . $execution_time . ' seconds' );
+        error_log( 'WP Site Analyzer: Results structure - ' . json_encode( array_keys( $results ) ) );
+        
+        // Cache results
+        $cache_result = $this->cache_handler->set( 'scan_results', $final_results, 3600 ); // Cache for 1 hour
+        error_log( 'WP Site Analyzer: Cache set result - ' . ( $cache_result ? 'success' : 'failed' ) );
+        
+        // Update last scan time
+        update_option( 'wp_site_analyzer_last_scan', current_time( 'mysql' ) );
+
+        return $final_results;
     }
 
     /**

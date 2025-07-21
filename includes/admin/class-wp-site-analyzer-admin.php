@@ -43,6 +43,8 @@ class WP_Site_Analyzer_Admin {
         add_action( 'wp_ajax_wp_site_analyzer_scan', array( $this, 'handle_ajax_scan' ) );
         add_action( 'wp_ajax_wp_site_analyzer_export', array( $this, 'handle_ajax_export' ) );
         add_action( 'wp_ajax_wp_site_analyzer_get_progress', array( $this, 'handle_ajax_get_progress' ) );
+        add_action( 'wp_ajax_wp_site_analyzer_clear_cache', array( $this, 'handle_ajax_clear_cache' ) );
+        add_action( 'wp_ajax_wp_site_analyzer_test_cache', array( $this, 'handle_ajax_test_cache' ) );
     }
 
     /**
@@ -237,6 +239,74 @@ class WP_Site_Analyzer_Admin {
                     </ul>
                     <p><strong><?php esc_html_e( 'How to use:', 'wp-site-analyzer' ); ?></strong> <?php esc_html_e( 'Click "Start New Scan" to analyze your site, then view the AI Report to copy and share with AI models.', 'wp-site-analyzer' ); ?></p>
                 </div>
+                
+                <?php if ( current_user_can( 'manage_options' ) && ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ) : ?>
+                <div class="dashboard-section" style="background: #fff3cd; border-color: #ffeaa7;">
+                    <h2><?php esc_html_e( 'Debug Information', 'wp-site-analyzer' ); ?></h2>
+                    
+                    <?php
+                    // Check cache
+                    $cache_handler = new WP_Site_Analyzer_Cache_Handler();
+                    $cached_results = $cache_handler->get( 'scan_results' );
+                    $last_scan = get_option( 'wp_site_analyzer_last_scan' );
+                    $scan_progress = get_option( 'wp_site_analyzer_scan_progress' );
+                    ?>
+                    
+                    <p><strong>Cache Status:</strong> <?php echo $cached_results ? 'Results cached' : 'No cached results'; ?></p>
+                    <p><strong>Last Scan:</strong> <?php echo $last_scan ? esc_html( $last_scan ) : 'Never'; ?></p>
+                    <p><strong>Scan Progress:</strong> <?php echo '<pre>' . esc_html( json_encode( $scan_progress, JSON_PRETTY_PRINT ) ) . '</pre>'; ?></p>
+                    
+                    <?php if ( $cached_results ) : ?>
+                        <details>
+                            <summary style="cursor: pointer; font-weight: bold; margin: 10px 0;">View Cached Results (Click to expand)</summary>
+                            <pre style="background: #f8f9fa; padding: 10px; overflow: auto; max-height: 400px;"><?php 
+                                echo esc_html( json_encode( array(
+                                    'execution_time' => $cached_results['execution_time'] ?? 'N/A',
+                                    'timestamp' => $cached_results['timestamp'] ?? 'N/A',
+                                    'scanners_found' => array_keys( $cached_results['results'] ?? array() ),
+                                    'results_sample' => array_map( function( $scanner_results ) {
+                                        return array(
+                                            'has_data' => ! empty( $scanner_results ),
+                                            'keys' => is_array( $scanner_results ) ? array_keys( $scanner_results ) : 'Not an array'
+                                        );
+                                    }, $cached_results['results'] ?? array() )
+                                ), JSON_PRETTY_PRINT ) ); 
+                            ?></pre>
+                        </details>
+                        
+                        <p style="margin-top: 10px;">
+                            <button class="button" onclick="wpSiteAnalyzerDebug.clearCache()"><?php esc_html_e( 'Clear Cache', 'wp-site-analyzer' ); ?></button>
+                            <button class="button" onclick="wpSiteAnalyzerDebug.testCache()"><?php esc_html_e( 'Test Cache Access', 'wp-site-analyzer' ); ?></button>
+                        </p>
+                    <?php endif; ?>
+                </div>
+                
+                <script>
+                window.wpSiteAnalyzerDebug = {
+                    clearCache: function() {
+                        if (!confirm('Clear all cached scan results?')) return;
+                        
+                        jQuery.post(wpSiteAnalyzer.ajax_url, {
+                            action: 'wp_site_analyzer_clear_cache',
+                            nonce: wpSiteAnalyzer.nonce
+                        }, function(response) {
+                            console.log('Clear cache response:', response);
+                            alert(response.success ? 'Cache cleared!' : 'Failed to clear cache');
+                            location.reload();
+                        });
+                    },
+                    testCache: function() {
+                        jQuery.post(wpSiteAnalyzer.ajax_url, {
+                            action: 'wp_site_analyzer_test_cache',
+                            nonce: wpSiteAnalyzer.nonce
+                        }, function(response) {
+                            console.log('Cache test response:', response);
+                            alert('Check browser console for cache test results');
+                        });
+                    }
+                };
+                </script>
+                <?php endif; ?>
             </div>
         </div>
         <?php
@@ -441,7 +511,16 @@ class WP_Site_Analyzer_Admin {
         $cache_handler = new WP_Site_Analyzer_Cache_Handler();
         $results = $cache_handler->get( 'scan_results' );
         
-        if ( ! $results ) {
+        // Debug logging
+        error_log( 'WP Site Analyzer: AI Report - Cache results: ' . ( $results ? 'Found' : 'Not found' ) );
+        if ( $results ) {
+            error_log( 'WP Site Analyzer: AI Report - Results structure: ' . json_encode( array_keys( $results ) ) );
+            if ( isset( $results['results'] ) ) {
+                error_log( 'WP Site Analyzer: AI Report - Scanner results: ' . json_encode( array_keys( $results['results'] ) ) );
+            }
+        }
+        
+        if ( ! $results || ! isset( $results['results'] ) ) {
             ?>
             <div class="wrap">
                 <h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
@@ -449,6 +528,17 @@ class WP_Site_Analyzer_Admin {
                 <a href="<?php echo admin_url( 'admin.php?page=wp-site-analyzer' ); ?>" class="button button-primary">
                     <?php esc_html_e( 'Go to Dashboard', 'wp-site-analyzer' ); ?>
                 </a>
+                
+                <?php if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) : ?>
+                <div style="margin-top: 20px; padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7;">
+                    <h3>Debug Information:</h3>
+                    <pre><?php 
+                    echo 'Cache Key: wp_site_analyzer_cache_scan_results\n';
+                    echo 'Cache Result: ' . ( $results ? 'Data found' : 'No data' ) . '\n';
+                    echo 'Results Structure: ' . json_encode( $results ? array_keys( $results ) : 'null', JSON_PRETTY_PRINT );
+                    ?></pre>
+                </div>
+                <?php endif; ?>
             </div>
             <?php
             return;
@@ -456,7 +546,8 @@ class WP_Site_Analyzer_Admin {
 
         // Generate the markdown report
         $markdown_formatter = new WP_Site_Analyzer_Markdown_Formatter();
-        $markdown_content = $markdown_formatter->format( $results );
+        // Pass the results array directly, not the wrapper
+        $markdown_content = $markdown_formatter->format( $results['results'] );
         
         // Convert markdown to HTML
         $html_content = $this->markdown_to_html( $markdown_content );
@@ -870,5 +961,73 @@ class WP_Site_Analyzer_Admin {
         $slug = preg_replace( '/[^a-z0-9]+/', '-', $slug );
         $slug = trim( $slug, '-' );
         return $slug;
+    }
+    
+    /**
+     * Handle AJAX clear cache request
+     */
+    public function handle_ajax_clear_cache() {
+        // Verify nonce
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'wp_site_analyzer_scan' ) ) {
+            wp_send_json_error( __( 'Security verification failed.', 'wp-site-analyzer' ) );
+        }
+        
+        // Check permissions
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( __( 'Insufficient permissions.', 'wp-site-analyzer' ) );
+        }
+        
+        // Clear cache
+        $cache_handler = new WP_Site_Analyzer_Cache_Handler();
+        $cache_handler->delete( 'scan_results' );
+        
+        // Clear progress
+        delete_option( 'wp_site_analyzer_scan_progress' );
+        delete_option( 'wp_site_analyzer_last_scan' );
+        
+        wp_send_json_success( array( 'message' => 'Cache cleared successfully' ) );
+    }
+    
+    /**
+     * Handle AJAX test cache request
+     */
+    public function handle_ajax_test_cache() {
+        // Verify nonce
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'wp_site_analyzer_scan' ) ) {
+            wp_send_json_error( __( 'Security verification failed.', 'wp-site-analyzer' ) );
+        }
+        
+        // Check permissions
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( __( 'Insufficient permissions.', 'wp-site-analyzer' ) );
+        }
+        
+        // Test cache
+        $cache_handler = new WP_Site_Analyzer_Cache_Handler();
+        
+        // Get cached results
+        $cached_results = $cache_handler->get( 'scan_results' );
+        
+        // Test transient directly
+        $transient_key = 'wp_site_analyzer_cache_scan_results';
+        $transient_value = get_transient( $transient_key );
+        
+        // Test options
+        $last_scan = get_option( 'wp_site_analyzer_last_scan' );
+        $scan_progress = get_option( 'wp_site_analyzer_scan_progress' );
+        
+        $debug_info = array(
+            'cache_handler_result' => $cached_results ? 'Found cached results' : 'No cached results',
+            'transient_exists' => $transient_value !== false,
+            'transient_key' => $transient_key,
+            'cached_data_structure' => $cached_results ? array_keys( $cached_results ) : null,
+            'results_exist' => isset( $cached_results['results'] ),
+            'results_count' => isset( $cached_results['results'] ) ? count( $cached_results['results'] ) : 0,
+            'last_scan' => $last_scan,
+            'scan_progress' => $scan_progress,
+            'current_time' => current_time( 'mysql' ),
+        );
+        
+        wp_send_json_success( $debug_info );
     }
 }
