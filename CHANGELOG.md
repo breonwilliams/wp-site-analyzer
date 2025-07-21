@@ -2,6 +2,17 @@
 
 All notable changes to WP Site Analyzer will be documented in this file.
 
+## [1.0.2] - 2024-01-21
+
+### Fixed
+- Fixed GitHub updater to properly handle zipball folder structure
+- Improved download handling for GitHub releases
+- Fixed "No valid plugins were found" error during updates
+
+### Changed
+- Enhanced the upgrader_source_selection filter to properly rename folders
+- Improved error handling in the update process
+
 ## [1.0.1] - 2024-01-21
 
 ### Added

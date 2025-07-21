@@ -68,6 +68,7 @@ class WP_Site_Analyzer_GitHub_Updater {
         add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'check_for_update' ) );
         add_filter( 'plugins_api', array( $this, 'plugin_info' ), 20, 3 );
         add_filter( 'upgrader_source_selection', array( $this, 'fix_plugin_folder' ), 10, 4 );
+        add_filter( 'upgrader_pre_download', array( $this, 'pre_download' ), 10, 3 );
         add_action( 'upgrader_process_complete', array( $this, 'purge_transients' ), 10, 2 );
     }
 
@@ -176,10 +177,7 @@ class WP_Site_Analyzer_GitHub_Updater {
                 }
             }
 
-            // Add authorization to download URL if needed
-            if ( ! empty( $this->access_token ) ) {
-                $download_url = add_query_arg( 'access_token', $this->access_token, $download_url );
-            }
+            // Don't add token to URL here, do it in pre_download filter
 
             // Create update object
             $update = array(
@@ -256,7 +254,7 @@ class WP_Site_Analyzer_GitHub_Updater {
      * @param string $remote_source
      * @param WP_Upgrader $upgrader
      * @param array $args
-     * @return string
+     * @return string|WP_Error
      */
     public function fix_plugin_folder( $source, $remote_source, $upgrader, $args ) {
         global $wp_filesystem;
@@ -265,14 +263,47 @@ class WP_Site_Analyzer_GitHub_Updater {
             return $source;
         }
 
+        // Get proper folder name
         $proper_folder_name = dirname( plugin_basename( $this->plugin_file ) );
-        $new_source = trailingslashit( $remote_source ) . $proper_folder_name;
-
-        if ( $wp_filesystem->move( $source, $new_source ) ) {
-            return $new_source;
+        
+        // GitHub zipball structure: username-repo-hash/
+        $source_files = $wp_filesystem->dirlist( $remote_source );
+        if ( ! $source_files ) {
+            return $source;
         }
-
-        return $source;
+        
+        // Find the actual plugin folder (should be the first directory)
+        $github_folder = '';
+        foreach ( $source_files as $file => $file_info ) {
+            if ( $file_info['type'] === 'd' ) {
+                $github_folder = $file;
+                break;
+            }
+        }
+        
+        if ( empty( $github_folder ) ) {
+            return new WP_Error( 'github_updater', 'Could not find plugin folder in GitHub download' );
+        }
+        
+        $github_source = trailingslashit( $remote_source ) . $github_folder;
+        $new_source = trailingslashit( $remote_source ) . $proper_folder_name;
+        
+        // Check if main plugin file exists
+        $plugin_file_name = basename( $this->plugin_file );
+        if ( ! $wp_filesystem->exists( $github_source . '/' . $plugin_file_name ) ) {
+            return new WP_Error( 'github_updater', 'Plugin file not found in GitHub download' );
+        }
+        
+        // Move to correct folder name
+        if ( $github_source !== $new_source ) {
+            if ( $wp_filesystem->move( $github_source, $new_source ) ) {
+                return $new_source;
+            } else {
+                return new WP_Error( 'github_updater', 'Could not rename plugin folder' );
+            }
+        }
+        
+        return $new_source;
     }
 
     /**
@@ -318,5 +349,59 @@ class WP_Site_Analyzer_GitHub_Updater {
         $html = preg_replace( '/(<li>.*<\/li>)/s', '<ul>$1</ul>', $html );
         
         return $html;
+    }
+    
+    /**
+     * Handle download for GitHub URLs
+     *
+     * @param bool $reply
+     * @param string $package
+     * @param object $upgrader
+     * @return bool|WP_Error
+     */
+    public function pre_download( $reply, $package, $upgrader ) {
+        // Check if this is our plugin
+        if ( strpos( $package, 'api.github.com' ) === false ) {
+            return $reply;
+        }
+        
+        // Check if it's our repo
+        if ( strpos( $package, $this->repo_slug ) === false ) {
+            return $reply;
+        }
+        
+        // Add authorization header if needed
+        if ( ! empty( $this->access_token ) ) {
+            $args = array(
+                'timeout' => 300,
+                'headers' => array(
+                    'Authorization' => 'token ' . $this->access_token,
+                ),
+            );
+            
+            // Download the file
+            $tmp_file = download_url( $package, 300, $args );
+        } else {
+            // For public repos, just download normally
+            $tmp_file = download_url( $package );
+        }
+        
+        if ( is_wp_error( $tmp_file ) ) {
+            return $tmp_file;
+        }
+        
+        // Connect to WP_Filesystem
+        global $wp_filesystem;
+        if ( ! $wp_filesystem ) {
+            WP_Filesystem();
+        }
+        
+        // Move to upgrader's working directory
+        $working_dir = $upgrader->skin->get_upgrader_data( 'working_dir' );
+        if ( ! $working_dir ) {
+            $working_dir = $upgrader->unpack_package( $tmp_file, true );
+        }
+        
+        return $tmp_file;
     }
 }
