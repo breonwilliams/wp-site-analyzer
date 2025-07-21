@@ -3,7 +3,7 @@
  * Plugin Name: WP Site Analyzer
  * Plugin URI: https://github.com/yourusername/wp-site-analyzer
  * Description: Comprehensive WordPress site analysis tool that scans and documents all content types, taxonomies, custom fields, and site structure in an AI-friendly format.
- * Version: 1.0.3
+ * Version: 1.1.0
  * Author: Your Name
  * Author URI: https://yourwebsite.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants
-define( 'WP_SITE_ANALYZER_VERSION', '1.0.3' );
+define( 'WP_SITE_ANALYZER_VERSION', '1.1.0' );
 define( 'WP_SITE_ANALYZER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WP_SITE_ANALYZER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'WP_SITE_ANALYZER_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );

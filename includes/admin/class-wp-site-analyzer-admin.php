@@ -258,7 +258,7 @@ class WP_Site_Analyzer_Admin {
                     <p><strong><?php esc_html_e( 'How to use:', 'wp-site-analyzer' ); ?></strong> <?php esc_html_e( 'Click "Start New Scan" to analyze your site, then view the AI Report to copy and share with AI models.', 'wp-site-analyzer' ); ?></p>
                 </div>
                 
-                <?php if ( current_user_can( 'manage_options' ) ) : // Temporarily removed WP_DEBUG check for debugging ?>
+                <?php if ( current_user_can( 'manage_options' ) && ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ) : ?>
                 <div class="dashboard-section" style="background: #fff3cd; border-color: #ffeaa7;">
                     <h2><?php esc_html_e( 'Debug Information', 'wp-site-analyzer' ); ?></h2>
                     
@@ -319,7 +319,6 @@ class WP_Site_Analyzer_Admin {
                             action: 'wp_site_analyzer_clear_cache',
                             nonce: wpSiteAnalyzer.nonce
                         }, function(response) {
-                            console.log('Clear cache response:', response);
                             alert(response.success ? 'Cache cleared!' : 'Failed to clear cache');
                             location.reload();
                         });
@@ -329,8 +328,7 @@ class WP_Site_Analyzer_Admin {
                             action: 'wp_site_analyzer_test_cache',
                             nonce: wpSiteAnalyzer.nonce
                         }, function(response) {
-                            console.log('Cache test response:', response);
-                            alert('Check browser console for cache test results');
+                            alert('Cache test completed. Response: ' + (response.success ? 'Success' : 'Failed'));
                         });
                     },
                     refreshLogs: function() {
@@ -599,16 +597,6 @@ class WP_Site_Analyzer_Admin {
         // If cache fails, try backup option
         if ( ! $results ) {
             $results = get_option( 'wp_site_analyzer_scan_results_backup' );
-            error_log( 'WP Site Analyzer: AI Report - Using backup option, found: ' . ( $results ? 'yes' : 'no' ) );
-        }
-        
-        // Debug logging
-        error_log( 'WP Site Analyzer: AI Report - Cache results: ' . ( $results ? 'Found' : 'Not found' ) );
-        if ( $results ) {
-            error_log( 'WP Site Analyzer: AI Report - Results structure: ' . json_encode( array_keys( $results ) ) );
-            if ( isset( $results['results'] ) ) {
-                error_log( 'WP Site Analyzer: AI Report - Scanner results: ' . json_encode( array_keys( $results['results'] ) ) );
-            }
         }
         
         if ( ! $results || ! isset( $results['results'] ) ) {

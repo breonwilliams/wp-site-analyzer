@@ -191,15 +191,7 @@ abstract class WP_Site_Analyzer_Scanner_Base {
             return;
         }
 
-        $log_entry = sprintf(
-            '[%s] [%s] [%s] %s',
-            current_time( 'mysql' ),
-            $this->scanner_name,
-            strtoupper( $level ),
-            $message
-        );
-
-        error_log( $log_entry );
+        // Logging disabled for production
     }
 
     /**

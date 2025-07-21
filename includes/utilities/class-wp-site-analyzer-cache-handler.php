@@ -82,23 +82,14 @@ class WP_Site_Analyzer_Cache_Handler {
     public function set( $key, $data, $expiration = null ) {
         $key = $this->sanitize_key( $key );
         $expiration = $expiration ?? $this->default_expiration;
-        
-        // Debug logging
-        error_log( 'WP Site Analyzer Cache: Setting key - ' . $key . ', Expiration: ' . $expiration );
 
         // Use object cache if available
         if ( wp_using_ext_object_cache() ) {
-            $result = wp_cache_set( $key, $data, $this->cache_group, $expiration );
-            error_log( 'WP Site Analyzer Cache: Set in object cache - ' . ( $result ? 'success' : 'failed' ) );
-            return $result;
+            return wp_cache_set( $key, $data, $this->cache_group, $expiration );
         }
 
         // Fall back to transients
-        $transient_key = $this->cache_prefix . $key;
-        $result = set_transient( $transient_key, $data, $expiration );
-        error_log( 'WP Site Analyzer Cache: Set transient ' . $transient_key . ' - ' . ( $result ? 'success' : 'failed' ) );
-        
-        return $result;
+        return set_transient( $this->cache_prefix . $key, $data, $expiration );
     }
 
     /**

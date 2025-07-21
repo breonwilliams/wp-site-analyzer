@@ -2,6 +2,20 @@
 
 All notable changes to WP Site Analyzer will be documented in this file.
 
+## [1.1.0] - 2024-01-21
+
+### Changed
+- Production release - removed all debug code
+- Cleaned up console logging
+- Removed error_log statements
+- Debug panel now only shows when WP_DEBUG is enabled
+- Optimized for production use
+
+### Improved
+- Better performance without debug overhead
+- Cleaner codebase
+- Production-ready release
+
 ## [1.0.3] - 2024-01-21
 
 ### Fixed
